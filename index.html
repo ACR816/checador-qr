@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registro de empleados</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+    body {
+      margin: 0;
+      background: #111827;
+      color: #f9fafb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .topbar {
+      width: 100%;
+      max-width: 520px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    h1 { font-size: 1.35rem; margin: 0; }
+    button {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    button.secondary { background: #374151; }
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: #1f2937;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+    }
+    .cam-selector {
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto 12px auto;
+      display: flex;
+      gap: 8px;
+    }
+    select {
+      width: 100%;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #4b5563;
+      background: #111827;
+      color: #f9fafb;
+      font-size: 0.85rem;
+    }
+    .scanner-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #000;
+    }
+    .qr-circle-guide {
+      pointer-events: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 210px;
+      height: 210px;
+      transform: translate(-50%, -50%);
+      border: 3px dashed #38bdf8;
+      border-radius: 50%;
+      box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.35);
+      z-index: 5;
+    }
+    .status-box {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 12px;
+      text-align: center;
+      background: #111827;
+      min-height: 76px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .status-ok { background: #065f46; color: #ecfdf5; }
+    .status-err { background: #7f1d1d; color: #fef2f2; }
+    .big-msg { font-size: 1.15rem; font-weight: bold; }
+    .sub-msg { font-size: 0.95rem; margin-top: 4px; opacity: 0.95; }
+    .hidden { display: none; }
+    .field { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 4px; font-size: 0.9rem; color: #d1d5db; }
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #4b5563;
+      background: #111827;
+      color: #fff;
+      font-size: 1rem;
+    }
+    #qr-preview {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      background: #fff;
+      color: #111;
+      padding: 16px;
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Registro de empleados</h1>
+    <button class="secondary" onclick="toggleAdmin()">Admin QR</button>
+  </div>
+
+  <!-- PANTALLA PRINCIPAL: CHECADOR -->
+  <div id="view-checador" class="card">
+    <div class="cam-selector">
+      <select id="cameraSelect" onchange="cambiarCamara()"></select>
+    </div>
+
+    <div class="scanner-wrap">
+      <div id="reader"></div>
+      <div class="qr-circle-guide"></div>
+    </div>
+
+    <div id="statusBox" class="status-box">
+      <div class="big-msg">Acerca tu código QR a la cámara</div>
+      <div class="sub-msg" id="clockText"></div>
+    </div>
+  </div>
+
+  <!-- PANTALLA ADMIN: GENERAR QR PARA EMPLEADOS -->
+  <div id="view-admin" class="card hidden">
+    <h2 style="margin-top:0; font-size:1.15rem;">Generar código QR de empleado</h2>
+    <div class="field">
+      <label for="empIdInput">ID del empleado (Ej. EMP-001)</label>
+      <input id="empIdInput" type="text" placeholder="Ej. EMP-001" />
+    </div>
+    <div class="field">
+      <label for="empNameInput">Nombre (etiqueta visual)</label>
+      <input id="empNameInput" type="text" placeholder="Ej. SERGIO MARCIAL CRUZ" />
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button onclick="generarQR()">Generar QR</button>
+      <button class="secondary" onclick="toggleAdmin()">Volver al checador</button>
+    </div>
+
+    <div id="qr-preview" class="hidden">
+      <div id="qrcode"></div>
+      <div id="qr-label" style="font-weight:bold;"></div>
+    </div>
+  </div>
+
+  <script>
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyuX5FVpeNVMf1lOT_m4Tn7QOcs26acRtJZ9maWA1s4WA0XoyjnVq3dQ6AtvL-_ljGLgA/exec";
+    const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutos anti-rebote
+    const recientes = new Map();
+    let html5QrCode = null;
+    let enviando = false;
+
+    function actualizarReloj() {
+      const ahora = new Date();
+      document.getElementById("clockText").textContent =
+        ahora.toLocaleDateString("es-MX") + " — " + ahora.toLocaleTimeString("es-MX");
+    }
+    setInterval(actualizarReloj, 1000);
+    actualizarReloj();
+
+    function mostrarEstado(titulo, subtitulo, tipo = "neutral") {
+      const box = document.getElementById("statusBox");
+      box.className = "status-box" + (tipo === "ok" ? " status-ok" : tipo === "err" ? " status-err" : "");
+      box.innerHTML = `<div class="big-msg">${titulo}</div><div class="sub-msg">${subtitulo}</div>`;
+    }
+
+    async function registrarAsistencia(codigoLeido) {
+      const idLimpio = String(codigoLeido || "").trim();
+      if (!idLimpio || enviando) return;
+
+      const ahora = Date.now();
+      const ultimaVez = recientes.get(idLimpio) || 0;
+      if (ahora - ultimaVez < COOLDOWN_MS) {
+        mostrarEstado("Registro ya procesado recientemente", "Espera unos minutos para volver a checar.", "err");
+        setTimeout(() => mostrarEstado("Acerca tu código QR a la cámara", "", "neutral"), 2500);
+        return;
+      }
+
+      enviando = true;
+      mostrarEstado("Registrando...", `Código: ${idLimpio}`, "neutral");
+
+      try {
+        const resp = await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ id: idLimpio })
+        });
+        const data = await resp.json();
+
+        if (data.ok) {
+          recientes.set(idLimpio, Date.now());
+          const saludo = data.movimiento === "Entrada" ? "Buen día" : "Hasta luego";
+          const etiquetaHora = data.movimiento === "Entrada" ? "Hora de entrada" : "Hora de salida";
+          mostrarEstado(
+            `Registro exitoso — ${saludo}, ${data.nombre}`,
+            `${etiquetaHora}: ${data.hora}`,
+            "ok"
+          );
+        } else {
+          mostrarEstado("No se pudo registrar", data.error || "Verifica el código QR.", "err");
+        }
+      } catch (e) {
+        mostrarEstado("Error de conexión", "Revisa el Wi-Fi o la URL del script.", "err");
+      } finally {
+        enviando = false;
+        setTimeout(() => {
+          mostrarEstado("Acerca tu código QR a la cámara", "", "neutral");
+          actualizarReloj();
+        }, 4000);
+      }
+    }
+
+    async function cargarYArrancarCamaras() {
+      const select = document.getElementById("cameraSelect");
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (!devices || devices.length === 0) {
+          mostrarEstado("No se encontraron cámaras", "Verifica los permisos.", "err");
+          return;
+        }
+
+        select.innerHTML = "";
+        devices.forEach((dev, idx) => {
+          const opt = document.createElement("option");
+          opt.value = dev.id;
+          opt.textContent = dev.label || `Cámara ${idx + 1}`;
+          select.appendChild(opt);
+        });
+
+        // Evita elegir DroidCam por defecto si hay otra cámara física
+        const camaraFisica = devices.find(d => !/droidcam/i.test(d.label)) || devices[0];
+        select.value = camaraFisica.id;
+
+        await iniciarConId(camaraFisica.id);
+      } catch (err) {
+        mostrarEstado("No se pudo abrir la cámara", "Otorga permisos de cámara en el navegador.", "err");
+      }
+    }
+
+    async function iniciarConId(cameraId) {
+      await detenerCamara();
+      html5QrCode = new Html5Qrcode("reader");
+      await html5QrCode.start(
+        cameraId,
+        { fps: 10, qrbox: { width: 200, height: 200 } },
+        (decodedText) => registrarAsistencia(decodedText),
+        () => {}
+      );
+    }
+
+    async function cambiarCamara() {
+      const cameraId = document.getElementById("cameraSelect").value;
+      if (cameraId) await iniciarConId(cameraId);
+    }
+
+    async function detenerCamara() {
+      if (html5QrCode && html5QrCode.isScanning) {
+        await html5QrCode.stop();
+        await html5QrCode.clear();
+        html5QrCode = null;
+      }
+    }
+
+    async function toggleAdmin() {
+      const checador = document.getElementById("view-checador");
+      const admin = document.getElementById("view-admin");
+      const vaAdmin = checador.classList.contains("hidden");
+
+      if (vaAdmin) {
+        admin.classList.add("hidden");
+        checador.classList.remove("hidden");
+        await cargarYArrancarCamaras();
+      } else {
+        await detenerCamara();
+        checador.classList.add("hidden");
+        admin.classList.remove("hidden");
+      }
+    }
+
+    function generarQR() {
+      const id = document.getElementById("empIdInput").value.trim();
+      const nombre = document.getElementById("empNameInput").value.trim();
+      if (!id) return;
+
+      const cont = document.getElementById("qrcode");
+      cont.innerHTML = "";
+      new QRCode(cont, {
+        text: id,
+        width: 190,
+        height: 190
+      });
+
+      document.getElementById("qr-label").textContent = nombre ? `${nombre} (${id})` : id;
+      document.getElementById("qr-preview").classList.remove("hidden");
+    }
+
+    window.addEventListener("load", cargarYArrancarCamaras);
+  </script>
+</body>
+</html>
