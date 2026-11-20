@@ -85,19 +85,19 @@
     }
     .status-box {
       margin-top: 16px;
-      padding: 14px;
+      padding: 16px;
       border-radius: 12px;
       text-align: center;
       background: #111827;
-      min-height: 76px;
+      min-height: 84px;
       display: flex;
       flex-direction: column;
       justify-content: center;
     }
-    .status-ok { background: #065f46; color: #ecfdf5; }
-    .status-err { background: #7f1d1d; color: #fef2f2; }
+    .status-ok { background: #065f46; color: #ecfdf5; border: 1px solid #10b981; }
+    .status-err { background: #7f1d1d; color: #fef2f2; border: 1px solid #ef4444; }
     .big-msg { font-size: 1.15rem; font-weight: bold; }
-    .sub-msg { font-size: 0.95rem; margin-top: 4px; opacity: 0.95; }
+    .sub-msg { font-size: 1rem; margin-top: 6px; opacity: 0.95; }
     .hidden { display: none; }
     .field { margin-bottom: 12px; }
     label { display: block; margin-bottom: 4px; font-size: 0.9rem; color: #d1d5db; }
@@ -170,14 +170,17 @@
 
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyuX5FVpeNVMf1lOT_m4Tn7QOcs26acRtJZ9maWA1s4WA0XoyjnVq3dQ6AtvL-_ljGLgA/exec";
-    const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutos anti-rebote
+    const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutos anti-rebote por empleado
     const recientes = new Map();
     let html5QrCode = null;
-    let enviando = false;
+    let bloqueadoEnPantalla = false; // Mantiene visible el mensaje 4.5 segundos sin sobreescribirlo
 
     function actualizarReloj() {
+      if (bloqueadoEnPantalla) return;
+      const clock = document.getElementById("clockText");
+      if (!clock) return;
       const ahora = new Date();
-      document.getElementById("clockText").textContent =
+      clock.textContent =
         ahora.toLocaleDateString("es-MX") + " — " + ahora.toLocaleTimeString("es-MX");
     }
     setInterval(actualizarReloj, 1000);
@@ -186,22 +189,31 @@
     function mostrarEstado(titulo, subtitulo, tipo = "neutral") {
       const box = document.getElementById("statusBox");
       box.className = "status-box" + (tipo === "ok" ? " status-ok" : tipo === "err" ? " status-err" : "");
-      box.innerHTML = `<div class="big-msg">${titulo}</div><div class="sub-msg">${subtitulo}</div>`;
+      box.innerHTML = `<div class="big-msg">${titulo}</div><div class="sub-msg" id="clockText">${subtitulo}</div>`;
+    }
+
+    function reiniciarPantalla(segundos = 4.5) {
+      setTimeout(() => {
+        bloqueadoEnPantalla = false;
+        mostrarEstado("Acerca tu código QR a la cámara", "", "neutral");
+        actualizarReloj();
+      }, segundos * 1000);
     }
 
     async function registrarAsistencia(codigoLeido) {
       const idLimpio = String(codigoLeido || "").trim();
-      if (!idLimpio || enviando) return;
+      if (!idLimpio || bloqueadoEnPantalla) return;
+
+      bloqueadoEnPantalla = true;
 
       const ahora = Date.now();
       const ultimaVez = recientes.get(idLimpio) || 0;
       if (ahora - ultimaVez < COOLDOWN_MS) {
         mostrarEstado("Registro ya procesado recientemente", "Espera unos minutos para volver a checar.", "err");
-        setTimeout(() => mostrarEstado("Acerca tu código QR a la cámara", "", "neutral"), 2500);
+        reiniciarPantalla(2.5);
         return;
       }
 
-      enviando = true;
       mostrarEstado("Registrando...", `Código: ${idLimpio}`, "neutral");
 
       try {
@@ -221,17 +233,14 @@
             `${etiquetaHora}: ${data.hora}`,
             "ok"
           );
+          reiniciarPantalla(4.5);
         } else {
           mostrarEstado("No se pudo registrar", data.error || "Verifica el código QR.", "err");
+          reiniciarPantalla(3);
         }
       } catch (e) {
         mostrarEstado("Error de conexión", "Revisa el Wi-Fi o la URL del script.", "err");
-      } finally {
-        enviando = false;
-        setTimeout(() => {
-          mostrarEstado("Acerca tu código QR a la cámara", "", "neutral");
-          actualizarReloj();
-        }, 4000);
+        reiniciarPantalla(3);
       }
     }
 
@@ -252,7 +261,6 @@
           select.appendChild(opt);
         });
 
-        // Evita elegir DroidCam por defecto si hay otra cámara física
         const camaraFisica = devices.find(d => !/droidcam/i.test(d.label)) || devices[0];
         select.value = camaraFisica.id;
 
